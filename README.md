@@ -1,6 +1,7 @@
 # hermes-vision-inline
 
 A Hermes plugin that lets your model look at images and video itself, instead of getting a written description from the auxiliary model.
+Keeping the image inline preserves the full context, supports follow-up questions without reprocessing, allows the model to inspect relevant details directly, and avoids the added complexity of a separate captioning model. It is generally much faster and more accurate and easier to work with.
 For images this is a restoration. Native routing shipped as the fix for [issue #29135](https://github.com/NousResearch/hermes-agent/issues/29135), then [PR #97339](https://github.com/NousResearch/hermes-agent/pull/97339) reversed it.
 
 ![routing](docs/demo.svg)
