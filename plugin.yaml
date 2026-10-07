@@ -1,0 +1,7 @@
+name: hermes-vision-inline
+version: "1.0.0"
+description: "A Hermes plugin that lets your model look at images and video inline, instead of getting a written description from the auxiliary model."
+author: BrokeSkill
+license: MIT
+provides_middleware:
+  - tool_execution
