@@ -6,14 +6,10 @@
   </defs>
   <rect width="880" height="300" rx="16" fill="#f6f8fa"/>
 
-  <rect x="24" y="96" width="150" height="44" rx="12" fill="#ffffff" stroke="#d0d7de"/>
-  <text x="99" y="124" text-anchor="middle" fill="#24292f" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">vision_analyze</text>
+  <rect x="24" y="128" width="150" height="44" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="99" y="156" text-anchor="middle" fill="#24292f" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">vision_analyze</text>
 
-  <rect x="24" y="160" width="150" height="44" rx="12" fill="#ffffff" stroke="#d0d7de"/>
-  <text x="99" y="188" text-anchor="middle" fill="#24292f" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">video_analyze</text>
-
-  <line x1="174" y1="118" x2="222" y2="140" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="174" y1="182" x2="222" y2="160" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="174" y1="150" x2="222" y2="150" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
   <rect x="228" y="110" width="196" height="80" rx="14" fill="#ffffff" stroke="#0969da" stroke-width="1.5"/>
   <text x="326" y="145" text-anchor="middle" fill="#24292f" font-size="14">can your model</text>
@@ -25,7 +21,7 @@
   <text x="446" y="206" fill="#bc4c00" font-size="12">no</text>
 
   <rect x="500" y="56" width="352" height="56" rx="12" fill="#dafbe1" stroke="#1a7f37"/>
-  <text x="676" y="89" text-anchor="middle" fill="#1a7f37" font-size="13">the media goes straight to your model</text>
+  <text x="676" y="89" text-anchor="middle" fill="#1a7f37" font-size="13">the image goes straight to your model</text>
 
   <rect x="500" y="188" width="352" height="56" rx="12" fill="#fff1e5" stroke="#bc4c00"/>
   <text x="676" y="221" text-anchor="middle" fill="#bc4c00" font-size="13">a vision model describes it first</text>

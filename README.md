@@ -1,10 +1,10 @@
 # hermes-vision-inline
 
-A Hermes plugin that lets your model look at images and video itself, instead of getting a written description from the auxiliary model.
+A Hermes plugin that attaches an image to your session model inline when the model can see it, instead of letting the auxiliary vision model write a description.
 
-Keeping the image inline preserves the full context, supports follow-up questions without reprocessing, allows the model to inspect relevant details directly, and avoids the added complexity of a separate captioning model. It is generally much faster and more accurate and easier to work with.
+Core already attaches images natively by default. What this plugin changes is an explicit `auxiliary.vision` backend: with a captioning model configured, core sends every `vision_analyze` call there, and this plugin keeps the image in the conversation instead when the main model accepts it. The plugin still respects `agent.image_input_mode: text`, which turns image attachment off.
 
-For images this is a restoration. Native routing shipped as the fix for [issue #29135](https://github.com/NousResearch/hermes-agent/issues/29135), then [PR #97339](https://github.com/NousResearch/hermes-agent/pull/97339) reversed it.
+Keeping the image inline preserves the full context, supports follow-up questions without reprocessing, and lets the model inspect details directly.
 
 ![routing](docs/demo.svg)
 
@@ -38,18 +38,17 @@ The desktop backend caches its plugin list per process, so a restart is *needed*
 
 ## Usage
 
-When the Model chooses either _vision_analyze_ or _video_analyze_, it stops the call, looks up the session model, and
+When the model calls _vision_analyze_, the plugin looks up the session model and
 picks a path:
 
-| catalog says | path taken |
+| condition | path taken |
 | --- | --- |
-| model accepts images | `_vision_analyze_native` runs; the image is encoded into the tool result as an `image_url` part |
-| model accepts video | the video is materialized, base64 encoded, and attached as a `video_url` part |
-| model does not, or is not listed | `vision_analyze_tool` / `video_analyze_tool` runs; the auxiliary vision model returns `{"success": true, "analysis": "..."}` |
+| `agent.image_input_mode` is `text`, the provider drops images inside tool results, or the model is not listed as vision-capable | `vision_analyze_tool` runs; the auxiliary vision model returns `{"success": true, "analysis": "..."}` |
+| the model accepts images | `_vision_analyze_native` runs; the image is encoded into the tool result as an `image_url` part |
 
 ## How the model is identified
 
-The decision of if a Model is Vision/Video capable comes from the models.dev catalog Hermes keeps on disk
+The decision of whether a model is vision-capable comes from the models.dev catalog Hermes keeps on disk
 (`~/.hermes/models_dev_cache.json`, 8000+ models, refreshed by Hermes).
 
 ## Install without a plugin loader

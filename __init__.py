@@ -6,18 +6,20 @@ import logging
 import re
 import threading
 from typing import Any, Dict, Optional, Tuple
+
 logger = logging.getLogger("plugin.hermes-vision-inline")
-__version__ = "1.0.0"
-_MEDIA_TOOLS = ("vision_analyze", "video_analyze")
-_SEES_CACHE: Dict[Tuple[str, str, str], bool] = {}
+__version__ = "1.1.0"
+_TOOL = "vision_analyze"
+_VALID_MODES = frozenset({"auto", "native", "text"})
+_SEES_CACHE: Dict[Tuple[str, str], bool] = {}
 
 
 def _normalise_id(model: str) -> str:
     m = (model or "").strip().lower()
-    m = m.rsplit("/", 1)[-1]             # drop a provider prefix
-    m = m.split(":", 1)[0]               # drop a :variant tag
-    m = m.replace(".", "-")              # v4.1 and v4-1 are one model
-    return re.sub(r"-\d{4,8}$", "", m)   # drop a date suffix (-0731, -20250929)
+    m = m.rsplit("/", 1)[-1]
+    m = m.split(":", 1)[0]
+    m = m.replace(".", "-")
+    return re.sub(r"-\d{4,8}$", "", m)
 
 
 def _catalog_data() -> Dict[str, Any]:
@@ -29,14 +31,14 @@ def _catalog_data() -> Dict[str, Any]:
         return {}
 
 
-def _entry_for(provider: str, model: str) -> Optional[Dict[str, bool]]:
+def _entry_for(provider: str, model: str) -> Optional[bool]:
     if not model:
         return None
     try:
         from agent.models_dev import get_model_capabilities
         caps = get_model_capabilities(provider, model, allow_network=False)
         if caps is not None:
-            return {"image": bool(caps.supports_vision)}
+            return bool(caps.supports_vision)
     except Exception:
         pass
 
@@ -51,18 +53,17 @@ def _entry_for(provider: str, model: str) -> Optional[Dict[str, bool]]:
                 continue
             mods = ((meta or {}).get("modalities") or {}).get("input") or []
             if "image" in mods:
-                return {"image": True, "video": "video" in mods}
+                return True
             saw_text_only = True
-    return {"image": False, "video": False} if saw_text_only else None
+    return False if saw_text_only else None
 
 
-def _sees(provider: str, model: str, media: str) -> bool:
-    key = (provider, model, media)
+def _sees_images(provider: str, model: str) -> bool:
+    key = (provider, model)
     if key not in _SEES_CACHE:
-        entry = _entry_for(provider, model)
-        verdict = bool(entry and entry.get(media))
+        verdict = bool(_entry_for(provider, model))
         _SEES_CACHE[key] = verdict
-        logger.info("hermes-vision-inline: catalog says %s takes %s -> %s", model, media, verdict)
+        logger.info("hermes-vision-inline: catalog says %s takes images -> %s", model, verdict)
     return _SEES_CACHE[key]
 
 
@@ -75,13 +76,41 @@ def _identity() -> Tuple[str, str]:
         return "", ""
 
 
-def _route(tool_name: str, provider: str, model: str) -> str:
-    """Where a call goes: ``native``, ``aux`` or ``passthrough``. Pure."""
-    if tool_name == "vision_analyze":
-        return "native" if _sees(provider, model, "image") else "aux"
-    if tool_name == "video_analyze":
-        return "native" if _sees(provider, model, "video") else "aux"
-    return "passthrough"
+def _config() -> Dict[str, Any]:
+    try:
+        from hermes_cli.config import load_config_readonly
+        cfg = load_config_readonly()
+        return cfg if isinstance(cfg, dict) else {}
+    except Exception as exc:
+        logger.debug("hermes-vision-inline: config unavailable: %s", exc)
+        return {}
+
+
+def _image_input_mode(cfg: Dict[str, Any]) -> str:
+    agent = cfg.get("agent")
+    if not isinstance(agent, dict):
+        return "auto"
+    mode = agent.get("image_input_mode")
+    mode = mode.strip().lower() if isinstance(mode, str) else ""
+    return mode if mode in _VALID_MODES else "auto"
+
+
+def _accepts_images_in_tool_results(provider: str, model: str, cfg: Dict[str, Any]) -> bool:
+    try:
+        from tools.vision_tools import _accepts_tool_result_images
+        return bool(_accepts_tool_result_images(provider, model, cfg))
+    except Exception as exc:
+        logger.debug("hermes-vision-inline: tool-result image gate unavailable: %s", exc)
+        return False
+
+
+def _route(provider: str, model: str, cfg: Dict[str, Any]) -> str:
+    if _image_input_mode(cfg) == "text":
+        return "aux"
+    if not _accepts_images_in_tool_results(provider, model, cfg):
+        return "aux"
+    return "native" if _sees_images(provider, model) else "aux"
+
 
 async def _vision_inline(args: Dict[str, Any], task_id: Optional[str]) -> Any:
     from tools.vision_tools import _vision_analyze_native
@@ -89,44 +118,6 @@ async def _vision_inline(args: Dict[str, Any], task_id: Optional[str]) -> Any:
     return await _vision_analyze_native(
         args.get("image_url", ""), args.get("question", ""),
         task_id=task_id, region=args.get("region"))
-
-
-
-async def _video_inline(args: Dict[str, Any], task_id: Optional[str]) -> Any:
-    from tools.vision_tools import _video_to_base64_data_url, _materialize_video,         _detect_video_mime_type, _MAX_VIDEO_BASE64_BYTES, _unlink_quietly
-    question = args.get("question", "")
-    temp_paths: list = []
-    try:
-        path = await _materialize_video(args.get("video_url", ""), task_id, temp_paths)
-        mime = _detect_video_mime_type(path)
-        if not mime:
-            raise ValueError(f"unsupported video format: {path.suffix}")
-        data_url = _video_to_base64_data_url(path, mime_type=mime)
-        if len(data_url) > _MAX_VIDEO_BASE64_BYTES:
-            raise ValueError("video too large to embed inline")
-        text = ("Video loaded into your context - you can see it natively now. "
-                "Use your built-in video understanding to answer.")
-        if isinstance(question, str) and question.strip():
-            text += f"\n\nQuestion: {question.strip()}"
-        return {
-            "_multimodal": True,
-            "content": [
-                {"type": "text", "text": text},
-                {"type": "video_url", "video_url": {"url": data_url}},
-            ],
-            "text_summary": ("Video attached natively for the main model. "
-                             "Answer using built-in video understanding."),
-            "meta": {"video_url": args.get("video_url", "")[:200], "native_video": True},
-        }
-    finally:
-        for tmp in temp_paths:
-            _unlink_quietly(tmp)
-
-
-_HANDLERS = {
-    "vision_analyze": _vision_inline,
-    "video_analyze": _video_inline,
-}
 
 
 def _run_sync(coro: Any) -> Any:
@@ -153,18 +144,17 @@ def _run_sync(coro: Any) -> Any:
 
 
 def _media_middleware(tool_name: str, args: Dict[str, Any], next_call, **kw: Any) -> Any:
-    """Intercept the two media tools; pass every other call straight through."""
-    if tool_name not in _MEDIA_TOOLS:
+    if tool_name != _TOOL:
         return next_call(args)
-
-    if _route(tool_name, *_identity()) != "native":
+    if _route(*_identity(), _config()) != "native":
         return next_call(args)
     try:
-        return _run_sync(_HANDLERS[tool_name](args, kw.get("task_id")))
+        return _run_sync(_vision_inline(args, kw.get("task_id")))
     except Exception as exc:
         logger.warning("hermes-vision-inline: inline %s failed, using the vision model: %s",
                        tool_name, exc)
         return next_call(args)
+
 
 def register(ctx: Any) -> None:
     try:
